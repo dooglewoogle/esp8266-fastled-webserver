@@ -466,6 +466,29 @@ DEFINE_GRADIENT_PALETTE( Blue_Cyan_Yellow_gp ) {
   255, 255,255,  0};
 
 
+DEFINE_GRADIENT_PALETTE( sunrise_gp ) {
+    0,   4,   6,   5,
+    50,  50,  40,  30, 
+   114,  204, 102, 0,
+   127,  204, 204, 0,
+   140,  204, 102, 0,
+   205,  50, 40, 30,
+   255,  4,   6,   5
+  };
+
+DEFINE_GRADIENT_PALETTE( presunrise_gp ) {
+    0,   4,   6,   0,
+    50,  4,   0,   5,
+   127,  4,   6,   5,
+   205,  0,   6,   5,
+   255,  4,   6,   0,
+  };
+
+DEFINE_GRADIENT_PALETTE( black_gp ) {
+    0,   0,   0,   0,
+   255,  0,   0,   0,
+  };
+
 // Single array of defined cpt-city color palettes.
 // This will let us programmatically choose one based on
 // a number, rather than having to activate each explicitly
@@ -509,10 +532,13 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
   BlacK_Blue_Magenta_White_gp,
   BlacK_Magenta_Red_gp,
   BlacK_Red_Magenta_Yellow_gp,
-  Blue_Cyan_Yellow_gp };
+  Blue_Cyan_Yellow_gp,
+  sunrise_gp,
+  presunrise_gp,
+  black_gp
+  };
 
 
 // Count of how many cpt-city gradients are defined:
 const uint8_t gGradientPaletteCount =
   sizeof( gGradientPalettes) / sizeof( TProgmemRGBGradientPalettePtr );
-

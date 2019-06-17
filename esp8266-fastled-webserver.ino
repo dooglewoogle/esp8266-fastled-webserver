@@ -16,10 +16,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//#define FASTLED_ALLOW_INTERRUPTS 1
-//#define INTERRUPT_THRESHOLD 1
+#define FASTLED_ALLOW_INTERRUPTS 1
+#define INTERRUPT_THRESHOLD 1
 #define FASTLED_INTERRUPT_RETRY_COUNT 0
 
+
+#include <Debouncer.h>
 #include <FastLED.h>
 FASTLED_USING_NAMESPACE
 
@@ -36,6 +38,7 @@ extern "C" {
 #include <EEPROM.h>
 //#include <IRremoteESP8266.h>
 #include "GradientPalettes.h"
+#include<ArduinoOTA.h>
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
@@ -53,11 +56,12 @@ ESP8266HTTPUpdateServer httpUpdateServer;
 #include "FSBrowser.h"
 
 #define DATA_PIN      D5
-#define LED_TYPE      WS2811
-#define COLOR_ORDER   RGB
-#define NUM_LEDS      200
+#define POWER_BTN_PIN D3
+#define LED_TYPE      WS2812
+#define COLOR_ORDER   GRB
+#define NUM_LEDS      120
 
-#define MILLI_AMPS         2000 // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
+#define MILLI_AMPS         2550 // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
 #define FRAMES_PER_SECOND  120  // here you can control the speed. With the Access Point / Web Server the animations run a bit slower.
 
 const bool apMode = false;
@@ -94,6 +98,11 @@ uint8_t cooling = 49;
 uint8_t sparking = 60;
 
 uint8_t speed = 30;
+
+bool sunriseStarted = false;
+uint32_t startTime;
+
+
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -139,6 +148,7 @@ typedef PatternAndName PatternAndNameList[];
 
 #include "Twinkles.h"
 #include "TwinkleFOX.h"
+#include "sunrise.h"
 
 // List of patterns to cycle through.  Each is defined as a separate function below.
 
@@ -178,6 +188,8 @@ PatternAndNameList patterns = {
   { fire,                   "Fire" },
   { water,                  "Water" },
 
+  { preSunrise,         "Presunrise" },
+  { sunrise,                "Sunrise" },
   { showSolidColor,         "Solid Color" }
 };
 
@@ -215,7 +227,10 @@ const String paletteNames[paletteCount] = {
 
 #include "Fields.h"
 
+Debouncer debouncer(D3, 50);
+
 void setup() {
+  pinMode(POWER_BTN_PIN, INPUT_PULLUP);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
   Serial.begin(115200);
@@ -371,6 +386,11 @@ void setup() {
     sendString(String(solidColor.r) + "," + String(solidColor.g) + "," + String(solidColor.b));
   });
 
+  webServer.on("/presunrise", HTTP_POST, []() {
+    preSunrise();
+    webServer.send(200, "text/json", {});
+  });
+
   webServer.on("/pattern", HTTP_POST, []() {
     String value = webServer.arg("value");
     setPattern(value.toInt());
@@ -434,11 +454,23 @@ void setup() {
   webServer.begin();
   Serial.println("HTTP web server started");
 
-  //  webSocketsServer.begin();
-  //  webSocketsServer.onEvent(webSocketEvent);
-  //  Serial.println("Web socket server started");
+  //webSocketsServer.begin();
+  //webSocketsServer.onEvent(webSocketEvent);
+  Serial.println("Web socket server started");
 
   autoPlayTimeout = millis() + (autoplayDuration * 1000);
+
+
+
+  debouncer.subscribe(Debouncer::Edge::FALL, []() {
+    Serial.println("ButtonPushed!");
+    if (power == 0) {
+      setPower(1);
+    } else {
+      setPower(0);
+    }
+
+  });
 }
 
 void sendInt(uint8_t value)
@@ -454,16 +486,19 @@ void sendString(String value)
 void broadcastInt(String name, uint8_t value)
 {
   String json = "{\"name\":\"" + name + "\",\"value\":" + String(value) + "}";
-  //  webSocketsServer.broadcastTXT(json);
+  //webSocketsServer.broadcastTXT(json);
 }
 
 void broadcastString(String name, String value)
 {
   String json = "{\"name\":\"" + name + "\",\"value\":\"" + String(value) + "\"}";
-  //  webSocketsServer.broadcastTXT(json);
+  //webSocketsServer.broadcastTXT(json);
 }
 
+
+
 void loop() {
+  debouncer.update();
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy(random(65535));
 
@@ -474,6 +509,7 @@ void loop() {
   //  handleIrInput();
 
   if (power == 0) {
+    Serial.println("Turned off");
     fill_solid(leds, NUM_LEDS, CRGB::Black);
     FastLED.show();
     // FastLED.delay(15);
@@ -494,9 +530,9 @@ void loop() {
     }
   }
 
-  // EVERY_N_SECONDS(10) {
-  //   Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
-  // }
+  EVERY_N_SECONDS(10) {
+    Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
+  }
 
   // change to a new cpt-city gradient palette
   EVERY_N_SECONDS( secondsPerPalette ) {
@@ -518,10 +554,12 @@ void loop() {
   // Call the current pattern function once, updating the 'leds' array
   patterns[currentPatternIndex].pattern();
 
-  FastLED.show();
+  //FastLED.show();
 
   // insert a delay to keep the framerate modest
+
   FastLED.delay(1000 / FRAMES_PER_SECOND);
+
 }
 
 //void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
@@ -832,7 +870,7 @@ void setAutoplayDuration(uint8_t value)
   autoPlayTimeout = millis() + (autoplayDuration * 1000);
 
   broadcastInt("autoplayDuration", autoplayDuration);
-}
+};
 
 void setSolidColor(CRGB color)
 {
@@ -937,7 +975,7 @@ void adjustBrightness(bool up)
   EEPROM.write(0, brightness);
   EEPROM.commit();
 
-  broadcastInt("brightness", brightness);
+  //broadcastInt("brightness", brightness);
 }
 
 void setBrightness(uint8_t value)
@@ -953,7 +991,7 @@ void setBrightness(uint8_t value)
   EEPROM.write(0, brightness);
   EEPROM.commit();
 
-  broadcastInt("brightness", brightness);
+  //broadcastInt("brightness", brightness);
 }
 
 void strandTest()
@@ -1265,4 +1303,107 @@ void palettetest( CRGB* ledarray, uint16_t numleds, const CRGBPalette16& gCurren
   static uint8_t startindex = 0;
   startindex--;
   fill_palette( ledarray, numleds, startindex, (256 / NUM_LEDS) + 1, gCurrentPalette, 255, LINEARBLEND);
+}
+
+void preSunrise() {
+  uint8_t r = 3; // min 3
+  uint8_t g = 7; // min 7
+  uint8_t b = 5; // min 5
+
+  // reset for next time
+  sunriseStarted = false;
+  CRGB morning = CRGB(r, g, b);
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  leds[0] = morning;
+
+  //fill_solid(leds, NUM_LEDS, CRGB::Black);
+  //for (uint8_t i=1; i<NUM_LEDS; i++){
+  //    leds[i] = CRGB::Black;
+  //}
+
+};
+
+void sunrise() {
+
+
+
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+  uint8_t mainWidth;
+  uint8_t midpoint = NUM_LEDS / 2;
+
+
+  if (!sunriseStarted)
+  {
+    startTime = millis();
+    sunriseStarted = true;
+
+  } else {
+    // setup
+    uint16_t elapsedSecs = (millis() - startTime) / 1000;
+    float phase1duration = 60 * 3;
+    uint16_t phase2_secs = elapsedSecs - (uint16_t) phase1duration;
+
+    uint16_t timeToUse;
+
+    uint8_t i;
+    float j;
+
+    CRGBPalette16 startColour;
+    CRGBPalette16 endColours;
+
+    CRGBPalette16 morning = presunrise_gp;
+
+
+    if (elapsedSecs <= phase1duration) {
+      //Serial.println("Phase 1 started");
+      startColour = black_gp;
+      endColours = morning;
+      timeToUse = elapsedSecs;
+      mainWidth = NUM_LEDS;
+
+    } else {
+      //Serial.println("Phase 2 started");
+      startColour = morning;
+      endColours = sunrise_gp;
+      timeToUse = phase2_secs;
+      mainWidth = NUM_LEDS * 0.7;
+
+    }
+    uint8_t changedSpeed = min( ((float)speed / 255) * 100, (float) 99);
+    uint8_t slowdown = 100 - max(changedSpeed, (uint8_t) 1);  //default 10
+    //Serial.println(slowdown);
+
+    fill_solid(leds, NUM_LEDS, ColorFromPalette(startColour, 127, 255, LINEARBLEND) );
+
+    uint8_t width = (timeToUse / slowdown) > mainWidth ? mainWidth : timeToUse / slowdown;
+    float remaineder = timeToUse % (slowdown * 10);
+    uint8_t blendAmt = (remaineder / (slowdown * 10)) * 255;
+
+    for (i = midpoint - (width / 2), j = 0.0; i < midpoint + (width / 2) + 1; i++, j++) {
+      uint8_t p = (j / width) * 255;
+
+      CRGB old = leds[i];
+      CRGB newCol = ColorFromPalette(endColours, p, 255, LINEARBLEND);
+
+      if (j < 2 || j > width - 2) {
+        leds[i] = blend(old, newCol, blendAmt);
+      } else {
+        leds[i] = newCol;
+      }
+    };
+  }
+
+};
+
+uint32_t seconds(uint32_t inputMillis) {
+  return inputMillis * 1000;
+}
+
+uint32_t minutes(uint32_t inputMillis) {
+  return inputMillis * 60 * 1000;
+}
+
+uint8_t scale(uint8_t value, uint8_t srcMin, uint8_t srcMax, uint8_t dstMin, uint8_t dstMax) {
+  return ((value - srcMin) / (srcMax - srcMin)) * (dstMax - dstMin) + dstMin;
 }
