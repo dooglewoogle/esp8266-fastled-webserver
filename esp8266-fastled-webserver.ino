@@ -187,6 +187,7 @@ PatternAndNameList patterns = {
   { juggle,                 "Juggle" },
   { fire,                   "Fire" },
   { water,                  "Water" },
+  { bed,                    "Bed" },
 
   { preSunrise,         "Presunrise" },
   { sunrise,                "Sunrise" },
@@ -230,6 +231,8 @@ const String paletteNames[paletteCount] = {
 Debouncer debouncer(D3, 50);
 
 void setup() {
+
+  power = 1;
   pinMode(POWER_BTN_PIN, INPUT_PULLUP);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
@@ -309,13 +312,19 @@ void setup() {
     WiFi.mode(WIFI_STA);
     Serial.printf("Connecting to %s\n", ssid);
     if (String(WiFi.SSID()) != String(ssid)) {
+      WiFi.disconnect();
+      WiFi.hostname("bedlights");
+      WiFi.config(staticIP, subnet, gateway, dns);
       WiFi.begin(ssid, password);
+      
+      Serial.println("beginning");
     }
   }
 
   httpUpdateServer.setup(&webServer);
 
   webServer.on("/all", HTTP_GET, []() {
+    Serial.println("getall?");
     String json = getFieldsJson(fields, fieldCount);
     webServer.send(200, "text/json", json);
   });
@@ -811,6 +820,7 @@ void loadSettings()
   brightness = EEPROM.read(0);
 
   currentPatternIndex = EEPROM.read(1);
+  
   if (currentPatternIndex < 0)
     currentPatternIndex = 0;
   else if (currentPatternIndex >= patternCount)
@@ -1113,6 +1123,14 @@ void water()
   heatMap(IceColors_p, false);
 }
 
+void bed()
+{
+  CRGBPalette16 b = bed_gp;
+  //fill_palette( leds, NUM_LEDS, 0, (256 / NUM_LEDS) + 1, b, 255, LINEARBLEND);
+  drawStaticPalette(b);
+}
+
+
 // Pride2015 by Mark Kriegsman: https://gist.github.com/kriegsman/964de772d64c502760e5
 // This function draws rainbows with an ever-changing,
 // widely-varying set of parameters.
@@ -1303,107 +1321,4 @@ void palettetest( CRGB* ledarray, uint16_t numleds, const CRGBPalette16& gCurren
   static uint8_t startindex = 0;
   startindex--;
   fill_palette( ledarray, numleds, startindex, (256 / NUM_LEDS) + 1, gCurrentPalette, 255, LINEARBLEND);
-}
-
-void preSunrise() {
-  uint8_t r = 3; // min 3
-  uint8_t g = 7; // min 7
-  uint8_t b = 5; // min 5
-
-  // reset for next time
-  sunriseStarted = false;
-  CRGB morning = CRGB(r, g, b);
-  fill_solid(leds, NUM_LEDS, CRGB::Black);
-  leds[0] = morning;
-
-  //fill_solid(leds, NUM_LEDS, CRGB::Black);
-  //for (uint8_t i=1; i<NUM_LEDS; i++){
-  //    leds[i] = CRGB::Black;
-  //}
-
-};
-
-void sunrise() {
-
-
-
-  fill_solid(leds, NUM_LEDS, CRGB::Black);
-
-  uint8_t mainWidth;
-  uint8_t midpoint = NUM_LEDS / 2;
-
-
-  if (!sunriseStarted)
-  {
-    startTime = millis();
-    sunriseStarted = true;
-
-  } else {
-    // setup
-    uint16_t elapsedSecs = (millis() - startTime) / 1000;
-    float phase1duration = 60 * 3;
-    uint16_t phase2_secs = elapsedSecs - (uint16_t) phase1duration;
-
-    uint16_t timeToUse;
-
-    uint8_t i;
-    float j;
-
-    CRGBPalette16 startColour;
-    CRGBPalette16 endColours;
-
-    CRGBPalette16 morning = presunrise_gp;
-
-
-    if (elapsedSecs <= phase1duration) {
-      //Serial.println("Phase 1 started");
-      startColour = black_gp;
-      endColours = morning;
-      timeToUse = elapsedSecs;
-      mainWidth = NUM_LEDS;
-
-    } else {
-      //Serial.println("Phase 2 started");
-      startColour = morning;
-      endColours = sunrise_gp;
-      timeToUse = phase2_secs;
-      mainWidth = NUM_LEDS * 0.7;
-
-    }
-    uint8_t changedSpeed = min( ((float)speed / 255) * 100, (float) 99);
-    uint8_t slowdown = 100 - max(changedSpeed, (uint8_t) 1);  //default 10
-    //Serial.println(slowdown);
-
-    fill_solid(leds, NUM_LEDS, ColorFromPalette(startColour, 127, 255, LINEARBLEND) );
-
-    uint8_t width = (timeToUse / slowdown) > mainWidth ? mainWidth : timeToUse / slowdown;
-    float remaineder = timeToUse % (slowdown * 10);
-    uint8_t blendAmt = (remaineder / (slowdown * 10)) * 255;
-
-    for (i = midpoint - (width / 2), j = 0.0; i < midpoint + (width / 2) + 1; i++, j++) {
-      uint8_t p = (j / width) * 255;
-
-      CRGB old = leds[i];
-      CRGB newCol = ColorFromPalette(endColours, p, 255, LINEARBLEND);
-
-      if (j < 2 || j > width - 2) {
-        leds[i] = blend(old, newCol, blendAmt);
-      } else {
-        leds[i] = newCol;
-      }
-    };
-  }
-
-};
-
-uint32_t seconds(uint32_t inputMillis) {
-  return inputMillis * 1000;
-}
-
-uint32_t minutes(uint32_t inputMillis) {
-  return inputMillis * 60 * 1000;
-}
-
-uint8_t scale(uint8_t value, uint8_t srcMin, uint8_t srcMax, uint8_t dstMin, uint8_t dstMax) {
-  return ((value - srcMin) / (srcMax - srcMin)) * (dstMax - dstMin) + dstMin;
 }
