@@ -16,12 +16,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define FASTLED_ALLOW_INTERRUPTS 1
-#define INTERRUPT_THRESHOLD 1
+//#define FASTLED_ALLOW_INTERRUPTS 1
+//#define INTERRUPT_THRESHOLD 1
 #define FASTLED_INTERRUPT_RETRY_COUNT 0
 
 
-#include <Debouncer.h>
+
 #include <FastLED.h>
 FASTLED_USING_NAMESPACE
 
@@ -56,7 +56,6 @@ ESP8266HTTPUpdateServer httpUpdateServer;
 #include "FSBrowser.h"
 
 #define DATA_PIN      D5
-#define POWER_BTN_PIN D3
 #define LED_TYPE      WS2812
 #define COLOR_ORDER   GRB
 #define NUM_LEDS      120
@@ -67,6 +66,14 @@ ESP8266HTTPUpdateServer httpUpdateServer;
 const bool apMode = false;
 
 #include "Secrets.h" // this file is intentionally not included in the sketch, so nobody accidentally commits their secret information.
+// create a Secrets.h file with the following:
+
+// AP mode password
+// const char WiFiAPPSK[] = "your-password";
+
+// Wi-Fi network to connect to (if not in AP mode)
+// char* ssid = "your-ssid";
+// char* password = "your-password";
 
 
 CRGB leds[NUM_LEDS];
@@ -91,9 +98,8 @@ uint8_t sparking = 60;
 
 uint8_t speed = 30;
 
-
-
-
+bool sunriseStarted = false;
+uint32_t startTime;
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -178,7 +184,6 @@ PatternAndNameList patterns = {
   { juggle,                 "Juggle" },
   { fire,                   "Fire" },
   { water,                  "Water" },
-  { bed,                    "Bed" },
 
   { preSunrise,         "Presunrise" },
   { sunrise,                "Sunrise" },
@@ -219,11 +224,7 @@ const String paletteNames[paletteCount] = {
 
 #include "Fields.h"
 
-Debouncer debouncer(D3, 50);
-
 void setup() {
-
-  pinMode(POWER_BTN_PIN, INPUT_PULLUP);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
   Serial.begin(115200);
@@ -270,6 +271,8 @@ void setup() {
     Serial.printf("\n");
   }
 
+  //disabled due to https://github.com/jasoncoon/esp8266-fastled-webserver/issues/62
+  //initializeWiFi();
 
   if (apMode)
   {
@@ -300,9 +303,6 @@ void setup() {
     WiFi.mode(WIFI_STA);
     Serial.printf("Connecting to %s\n", ssid);
     if (String(WiFi.SSID()) != String(ssid)) {
-      WiFi.disconnect();
-      WiFi.hostname("bedlights");
-      WiFi.config(staticIP, subnet, gateway, dns);
       WiFi.begin(ssid, password);
     }
   }
@@ -310,7 +310,6 @@ void setup() {
   httpUpdateServer.setup(&webServer);
 
   webServer.on("/all", HTTP_GET, []() {
-    Serial.println("getall?");
     String json = getFieldsJson(fields, fieldCount);
     webServer.send(200, "text/json", json);
   });
@@ -381,9 +380,9 @@ void setup() {
     sendString(String(solidColor.r) + "," + String(solidColor.g) + "," + String(solidColor.b));
   });
 
-  webServer.on("/presunrise", HTTP_POST, []() {
-    preSunrise();
-    webServer.send(200, "text/json", {});
+  webServer.on("/presunrise", HTTP_POST, [](){
+   preSunrise();
+   webServer.send(200, "text/json", {});
   });
 
   webServer.on("/pattern", HTTP_POST, []() {
@@ -449,21 +448,11 @@ void setup() {
   webServer.begin();
   Serial.println("HTTP web server started");
 
-  //webSocketsServer.begin();
-  //webSocketsServer.onEvent(webSocketEvent);
-  Serial.println("Web socket server started");
+    //webSocketsServer.begin();
+    //webSocketsServer.onEvent(webSocketEvent);
+    Serial.println("Web socket server started");
 
   autoPlayTimeout = millis() + (autoplayDuration * 1000);
-
-
-
-  debouncer.subscribe(Debouncer::Edge::FALL, []() {
-    if (power == 0) {
-      setPower(1);
-    } else {
-      setPower(0);
-    }
-  });
 }
 
 void sendInt(uint8_t value)
@@ -479,19 +468,16 @@ void sendString(String value)
 void broadcastInt(String name, uint8_t value)
 {
   String json = "{\"name\":\"" + name + "\",\"value\":" + String(value) + "}";
-  //webSocketsServer.broadcastTXT(json);
+    //webSocketsServer.broadcastTXT(json);
 }
 
 void broadcastString(String name, String value)
 {
   String json = "{\"name\":\"" + name + "\",\"value\":\"" + String(value) + "\"}";
-  //webSocketsServer.broadcastTXT(json);
+    //webSocketsServer.broadcastTXT(json);
 }
 
-
-
 void loop() {
-  debouncer.update();
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy(random(65535));
 
@@ -501,37 +487,7 @@ void loop() {
 
   //  handleIrInput();
 
-  if (powerIsTransitioning){
-      uint32_t timeDelta = millis() - transitionStartedAt;
-      uint32_t transitionMaxMillis = 1000;
-      if (timeDelta >= transitionMaxMillis){
-        powerIsTransitioning = false;
-      } else {
-        uint8_t tempBrightness;
-        uint8_t tdToBase255;
-        
-        if (power == 1){
-          tdToBase255 = ((float)timeDelta / (float)transitionMaxMillis) * 255;
-          tempBrightness = ( (float) brightness / 255) * tdToBase255;
-        } else {
-            tdToBase255 = ((float)timeDelta / (float)transitionMaxMillis) * 255;
-            tempBrightness = brightness - (( (float) brightness / 255) * tdToBase255);
-        }
-            
-        if (tempBrightness > 255){ tempBrightness = 255;}
-        else if (tempBrightness < 0){tempBrightness = 0;};
-        
-        Serial.print(" TB: ");
-        Serial.print(tempBrightness);
-
-        Serial.print(" TdB255: ");
-        Serial.print(tdToBase255);
-        Serial.println("");
-        FastLED.setBrightness(tempBrightness); 
-      }
-    }
-
-  if (power == 0 && !powerIsTransitioning) {
+  if (power == 0) {
     Serial.println("Turned off");
     fill_solid(leds, NUM_LEDS, CRGB::Black);
     FastLED.show();
@@ -553,9 +509,9 @@ void loop() {
     }
   }
 
-  EVERY_N_SECONDS(10) {
-    Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
-  }
+   EVERY_N_SECONDS(10) {
+     Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
+   }
 
   // change to a new cpt-city gradient palette
   EVERY_N_SECONDS( secondsPerPalette ) {
@@ -577,10 +533,10 @@ void loop() {
   // Call the current pattern function once, updating the 'leds' array
   patterns[currentPatternIndex].pattern();
 
+  FastLED.show();
+
   // insert a delay to keep the framerate modest
-
   FastLED.delay(1000 / FRAMES_PER_SECOND);
-
 }
 
 //void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
@@ -832,7 +788,6 @@ void loadSettings()
   brightness = EEPROM.read(0);
 
   currentPatternIndex = EEPROM.read(1);
-  
   if (currentPatternIndex < 0)
     currentPatternIndex = 0;
   else if (currentPatternIndex >= patternCount)
@@ -865,9 +820,6 @@ void loadSettings()
 void setPower(uint8_t value)
 {
   power = value == 0 ? 0 : 1;
-  transitionStartedAt = millis();
-  powerIsTransitioning = true;
-  
 
   EEPROM.write(5, power);
   EEPROM.commit();
@@ -1138,22 +1090,6 @@ void water()
   heatMap(IceColors_p, false);
 }
 
-void bed()
-{
-  CRGB orange = CRGB::DarkOrange;
-  CRGB blu = CRGB::RoyalBlue;
-  
-  for (int i=0;i<NUM_LEDS;i++){
-      
-      
-    
-    uint8_t blendAmt = (i/NUM_LEDS)*255;
-    leds[i] = blend(orange, blu, blendAmt);
-    };
-
-}
-
-
 // Pride2015 by Mark Kriegsman: https://gist.github.com/kriegsman/964de772d64c502760e5
 // This function draws rainbows with an ever-changing,
 // widely-varying set of parameters.
@@ -1197,8 +1133,6 @@ void pride()
     nblend( leds[pixelnumber], newcolor, 64);
   }
 }
-
-
 
 void radialPaletteShift()
 {
@@ -1348,11 +1282,132 @@ void palettetest( CRGB* ledarray, uint16_t numleds, const CRGBPalette16& gCurren
   fill_palette( ledarray, numleds, startindex, (256 / NUM_LEDS) + 1, gCurrentPalette, 255, LINEARBLEND);
 }
 
+void preSunrise(){
+  uint8_t r = 3; // min 3
+  uint8_t g = 7; // min 7
+  uint8_t b = 5; // min 5
 
-uint8_t centiToUint8(uint8_t input){
-    return (uint8_t) ((float) input / 100) * 255;
-  }
+  // reset for next time  
+  sunriseStarted = false;
 
-uint8_t remapUint8ToCenti(uint8_t input){
-    return (uint8_t) ((float) input / 255) * 100;
+  CRGB morning = CRGB(r, g, b);
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  leds[0] = morning;
+  };
+
+void sunrise(){
+
+  CRGBPalette16 sunrisePalette = sunrise_gp;
+  CRGB morning = CRGB(4,6,5);
+  
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+  uint8_t mainWidth = 75;
+  uint8_t midpoint = NUM_LEDS / 2;
+  
+
+  if (!sunriseStarted)
+  {
+    startTime = millis();
+    sunriseStarted = true;
+    
+  } else {
+      // setup
+      float elapsedSecs = (millis() - startTime) / 1000;
+      float phase1duration = 60 * 5;
+      uint16_t phase2_secs = elapsedSecs - (uint16_t) phase1duration;
+      
+      uint8_t i;
+      float j;
+      
+  
+      if (elapsedSecs <= phase1duration){
+        // phase1: slowly increase amount of leds on
+
+        // phase1 setup
+        uint8_t modMax = 60;
+        int modMin = 2;
+
+        // time elapsed in this phase mapped to the amount of leds. Ie, when elapsed time matches the phase1duration, this is the number of leds
+        uint8_t startTimeToLedNumber = (elapsedSecs / phase1duration) * NUM_LEDS;
+        //Serial.print("Starttimetolednumber: ");
+        //Serial.println(startTimeToLedNumber);
+
+//        if (startTimeToLedNumber >= NUM_LEDS){
+//          // we are done, wait for next phase
+//          fill_solid(leds, NUM_LEDS, morning);
+//          return;
+//        }
+//
+        // work out the every nth led to light up, counts down, as lower modulus gives more positives
+        uint8_t modNumber = max( (NUM_LEDS/2) - startTimeToLedNumber, modMin);
+        uint16_t modulus = min(modNumber, modMax);
+//
+//        Serial.print("Modulus: ");
+//        Serial.println(modNumber);
+//      
+//        for (i=0; i<=NUM_LEDS; i++){
+//          if (i % modulus == 0){
+//              leds[i] = morning;
+//            }
+//        }
+
+        // phase1 take 2
+
+        uint8_t groupSize = 12;
+        uint8_t groups = NUM_LEDS / groupSize;
+
+        uint8_t howFarThrough = max( (elapsedSecs / phase1duration) * groupSize, (float)1);
+        uint8_t INVHowFarThrough = max(NUM_LEDS - howFarThrough, 1);
+        Serial.print("howfarthrough: ");
+        Serial.print(howFarThrough);
+        Serial.print(" ");
+        Serial.println(INVHowFarThrough);
+
+        for (i=0; i<=NUM_LEDS; i++){
+           uint8_t relativeMax = i % groupSize;
+           uint8_t relativeCurr = i % INVHowFarThrough;
+           if (relativeCurr <= groupSize){        
+             leds[i] = morning;
+           }
+        }
+   
+      } else {
+
+        Serial.println("Phase 2 started");
+          // phase 2: middle leds turn orange and increase
+
+          fill_solid(leds, NUM_LEDS, morning);
+        
+          uint8_t width = (phase2_secs/10) > mainWidth? mainWidth : phase2_secs/10;
+          float remaineder = phase2_secs % 100;
+          uint8_t blendAmt = (remaineder/100)*255;
+          
+          for (i=midpoint-(width/2),j=0.0; i<midpoint+(width/2)+1; i++, j++){
+            uint8_t p = (j / width)*255;
+      
+            CRGB old = leds[i];
+            CRGB newCol = ColorFromPalette(sunrisePalette, p, 255, LINEARBLEND);
+      
+            if (j < 2 || j > width - 2){
+              leds[i] = blend(old, newCol, blendAmt);
+            } else {
+              leds[i] = newCol;
+            }
+          };
+    }
+}
+  
+};
+
+uint32_t seconds(uint32_t inputMillis){
+    return inputMillis * 1000;
+  }  
+
+uint32_t minutes(uint32_t inputMillis){
+    return inputMillis * 60 *1000;
+  }  
+
+uint8_t scale(uint8_t value, uint8_t srcMin, uint8_t srcMax, uint8_t dstMin, uint8_t dstMax){
+    return ((value - srcMin) / (srcMax-srcMin)) * (dstMax-dstMin) + dstMin;
   }

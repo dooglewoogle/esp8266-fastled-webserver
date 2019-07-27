@@ -17,7 +17,11 @@
 */
 
 uint8_t power = 1;
+bool powerIsTransitioning = false;
+
 uint8_t brightness = brightnessMap[brightnessIndex];
+uint8_t tempBrightness = brightnessMap[brightnessIndex];
+uint32_t transitionStartedAt = 0;
 
 //String setPower(String value) {
 //  power = value.toInt();

@@ -467,20 +467,20 @@ DEFINE_GRADIENT_PALETTE( Blue_Cyan_Yellow_gp ) {
 
 
 DEFINE_GRADIENT_PALETTE( sunrise_gp ) {
-    0,   4,   6,   5,
-    50,  50,  40,  30, 
-   114,  204, 102, 0,
-   127,  204, 204, 0,
-   140,  204, 102, 0,
-   205,  50, 40, 30,
-   255,  4,   6,   5
+     0,   0,   0,   5,
+    50,   25,  15,  5, 
+   112,  204, 102,  0,  //orange
+   127,  204, 204,  0,  //yellow
+   142,  204, 102,  0,  //orange
+   205,   50,  40, 30,
+   255,   25,  15,  5
   };
   
 DEFINE_GRADIENT_PALETTE( presunrise_gp ) {
     0,   0,   0,   5,
-    50,  4,   0,   5,
+    50,  0,   6,   5,
    127,  4,   6,   5,
-   205,  4,   0,   5,
+   205,  0,   6,   5,
    255,  0,   0,   5
   };
 
@@ -494,12 +494,8 @@ DEFINE_GRADIENT_PALETTE( black_gp ) {
    255,  0,   0,   0
   };
 
-DEFINE_GRADIENT_PALETTE( bed_gp ) {
-  0,    255, 150, 15, 
-  50,   255, 150, 15, 
-  205,  15 , 127, 255, 
-  225,  15 , 127, 255  
-};
+
+
 
 // Single array of defined cpt-city color palettes.
 // This will let us programmatically choose one based on
@@ -547,7 +543,6 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
   Blue_Cyan_Yellow_gp,
   sunrise_gp,
   presunrise_gp,
-  bed_gp,
   black_gp,
   white_gp
   };
