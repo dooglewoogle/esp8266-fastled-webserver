@@ -1,2 +1,12 @@
+<<<<<<< HEAD
 .kdev4/*
 *.kdev4
+=======
+.DS_Store
+Secrets.h
+build/
+buildcache/
+arduino.json
+c_cpp_properties.json
+.vscode
+>>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
