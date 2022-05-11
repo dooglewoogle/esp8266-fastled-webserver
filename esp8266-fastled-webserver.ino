@@ -62,20 +62,15 @@ ESP8266HTTPUpdateServer httpUpdateServer;
 #define POWER_BTN_PIN D3
 #define LED_TYPE      WS2812
 #define COLOR_ORDER   GRB
-#define NUM_LEDS      120
+#define NUM_LEDS      118
 
 #define MILLI_AMPS         2550 // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
 #define FRAMES_PER_SECOND  120  // here you can control the speed. With the Access Point / Web Server the animations run a bit slower.
 
-<<<<<<< HEAD
 const bool apMode = false;
 
 #include "Secrets.h" // this file is intentionally not included in the sketch, so nobody accidentally commits their secret information.
-=======
-String nameString;
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
 
-#include "Ping.h"
 
 CRGB leds[NUM_LEDS];
 
@@ -147,12 +142,9 @@ typedef PatternAndName PatternAndNameList[];
 
 #include "Twinkles.h"
 #include "TwinkleFOX.h"
-<<<<<<< HEAD
 #include "sunrise.h"
-=======
 #include "PridePlayground.h"
 #include "ColorWavesPlayground.h"
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
 
 // List of patterns to cycle through.  Each is defined as a separate function below.
 
@@ -238,12 +230,10 @@ const String paletteNames[paletteCount] = {
 Debouncer debouncer(D3, 50);
 
 void setup() {
-<<<<<<< HEAD
+
 
   pinMode(POWER_BTN_PIN, INPUT_PULLUP);
-=======
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP    
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
   Serial.begin(115200);
@@ -261,8 +251,7 @@ void setup() {
   EEPROM.begin(512);
   readSettings();
 
-  FastLED.setBrightness(brightness);
-
+  
   //  irReceiver.enableIRIn(); // Start the receiver
 
   Serial.println();
@@ -290,11 +279,8 @@ void setup() {
     Serial.printf("\n");
   }
 
-<<<<<<< HEAD
-=======
   // Do a little work to get a unique-ish name. Get the
   // last two bytes of the MAC (HEX'd)":
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
 
   // copy the mac address to a byte array
   uint8_t mac[WL_MAC_ADDR_LENGTH];
@@ -308,7 +294,7 @@ void setup() {
   String macIdString = macID;
   macIdString.toUpperCase();
 
-  nameString = "ESP8266-" + macIdString;
+  //nameString = "ESP8266-" + macIdString;
 
   char nameChar[nameString.length() + 1];
   memset(nameChar, 0, nameString.length() + 1);
@@ -321,28 +307,27 @@ void setup() {
   // reset settings - wipe credentials for testing
   // wifiManager.resetSettings();
 
-  wifiManager.setConfigPortalBlocking(false);
+  WiFi.mode(WIFI_STA);
+
+  //wifiManager.setConfigPortalBlocking(false);
+  wifiManager.setSTAStaticIPConfig(staticIP, gateway, subnet);
+ 
+  WiFi.hostname("bedlights");
+  
 
   //automatically connect using saved credentials if they exist
   //If connection fails it starts an access point with the specified name
-  if(wifiManager.autoConnect(nameChar)){
+  if(wifiManager.autoConnect("AC-AP")){
     Serial.println("Wi-Fi connected");
   }
-<<<<<<< HEAD
   else
   {
-    WiFi.mode(WIFI_STA);
     Serial.printf("Connecting to %s\n", ssid);
     if (String(WiFi.SSID()) != String(ssid)) {
       WiFi.disconnect();
-      WiFi.hostname("bedlights");
-      WiFi.config(staticIP, subnet, gateway, dns);
+      //WiFi.config(staticIP, subnet, gateway, dns);
       WiFi.begin(ssid, password);
     }
-=======
-  else {
-    Serial.println("Wi-Fi manager portal running");
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
   }
   
   httpUpdateServer.setup(&webServer);
@@ -445,7 +430,7 @@ void setup() {
 
   webServer.on("/presunrise", HTTP_POST, []() {
     preSunrise();
-    webServer.send(200, "text/json", {});
+    sendInt(currentPaletteIndex);
   });
 
   webServer.on("/pattern", HTTP_POST, []() {
@@ -529,14 +514,15 @@ void setup() {
   autoPlayTimeout = millis() + (autoplayDuration * 1000);
 
 
-
-  debouncer.subscribe(Debouncer::Edge::FALL, []() {
+  
+  debouncer.subscribe(Debouncer::Edge::FALL, [](const int state) {
     if (power == 0) {
       setPower(1);
     } else {
       setPower(0);
     }
   });
+
 }
 
 void sendInt(uint8_t value)
@@ -574,7 +560,6 @@ void loop() {
   webServer.handleClient();
   MDNS.update();
 
-<<<<<<< HEAD
   if (powerIsTransitioning){
       uint32_t timeDelta = millis() - transitionStartedAt;
       uint32_t transitionMaxMillis = 1000;
@@ -599,22 +584,21 @@ void loop() {
         Serial.print(tempBrightness);
 
         Serial.print(" TdB255: ");
-        Serial.print(tdToBase255);
-        Serial.println("");
+        Serial.println(tdToBase255);
+        Serial.println(power);
         FastLED.setBrightness(tempBrightness); 
+
       }
     }
 
   if (power == 0 && !powerIsTransitioning) {
-    Serial.println("Turned off");
+
     fill_solid(leds, NUM_LEDS, CRGB::Black);
     FastLED.show();
     // FastLED.delay(15);
     return;
   }
-=======
-  //  timeClient.update();
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
+
 
   static bool hasConnected = false;
   EVERY_N_SECONDS(1) {
@@ -636,26 +620,15 @@ void loop() {
     }
   }
 
-<<<<<<< HEAD
-  EVERY_N_SECONDS(10) {
-    Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
-  }
-=======
-  checkPingTimer();
+
 
   //  handleIrInput();
 
-  if (power == 0) {
-    fill_solid(leds, NUM_LEDS, CRGB::Black);
-    FastLED.show();
-    delay(1000 / FRAMES_PER_SECOND);
-    return;
-  }
 
   // EVERY_N_SECONDS(10) {
   //   Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
   // }
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
+
 
   // change to a new cpt-city gradient palette
   EVERY_N_SECONDS( secondsPerPalette ) {
@@ -979,19 +952,15 @@ void readSettings()
 
 void writeAndCommitSettings()
 {
-<<<<<<< HEAD
-  power = value == 0 ? 0 : 1;
-  transitionStartedAt = millis();
-  powerIsTransitioning = true;
+
+  //power = value == 0 ? 0 : 1;
   
 
-=======
   EEPROM.write(0, brightness);
   EEPROM.write(1, currentPatternIndex);
   EEPROM.write(2, solidColor.r);
   EEPROM.write(3, solidColor.g);
   EEPROM.write(4, solidColor.b);
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
   EEPROM.write(5, power);
   EEPROM.write(6, autoplay);
   EEPROM.write(7, autoplayDuration);
@@ -1008,6 +977,8 @@ void writeAndCommitSettings()
 void setPower(uint8_t value)
 {
   power = value == 0 ? 0 : 1;
+  transitionStartedAt = millis();
+  powerIsTransitioning = true;
   writeAndCommitSettings();
   broadcastInt("power", power);
 }
@@ -1117,16 +1088,10 @@ void adjustBrightness(bool up)
   brightness = brightnessMap[brightnessIndex];
 
   FastLED.setBrightness(brightness);
-<<<<<<< HEAD
 
-  EEPROM.write(0, brightness);
-  EEPROM.commit();
-
-  //broadcastInt("brightness", brightness);
-=======
   writeAndCommitSettings();
   broadcastInt("brightness", brightness);
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
+
 }
 
 void setBrightness(uint8_t value)
@@ -1138,16 +1103,9 @@ void setBrightness(uint8_t value)
   brightness = value;
 
   FastLED.setBrightness(brightness);
-<<<<<<< HEAD
 
-  EEPROM.write(0, brightness);
-  EEPROM.commit();
-
-  //broadcastInt("brightness", brightness);
-=======
   writeAndCommitSettings();
   broadcastInt("brightness", brightness);
->>>>>>> fb52db43d67bc9df602275eee8bd6b8f710b223f
 }
 
 void strandTest()
